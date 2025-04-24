@@ -1,0 +1,7 @@
+streamlit
+streamlit-webrtc
+av
+opencv-python
+azure-ai-vision-imageanalysis
+azure-core
+python-dotenv
