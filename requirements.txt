@@ -7,3 +7,4 @@ azure-core
 python-dotenv
 azure-cognitiveservices-speech
 openai
+ultralytics
