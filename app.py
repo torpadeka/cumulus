@@ -8,43 +8,50 @@ import logging
 from azure.ai.vision.imageanalysis import ImageAnalysisClient
 from azure.core.credentials import AzureKeyCredential
 from azure.cognitiveservices.speech import SpeechConfig, SpeechRecognizer, AudioConfig, ResultReason, CancellationReason
+from azure.core.exceptions import HttpResponseError
 from dotenv import load_dotenv
 import os
+from openai import AzureOpenAI
 
-# Set up logging for the app
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Suppress verbose Azure SDK logs (HTTP requests/responses)
 logging.getLogger('azure').setLevel(logging.WARNING)
 logging.getLogger('azure.core.pipeline.policies.http_logging_policy').setLevel(logging.WARNING)
 
-# Load environment variables from .env file
 load_dotenv()
 VISION_ENDPOINT = os.getenv("VISION_ENDPOINT")
 VISION_KEY = os.getenv("VISION_KEY")
 SPEECH_KEY = os.getenv("SPEECH_KEY")
 SPEECH_REGION = os.getenv("SPEECH_REGION")
+AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT")
+AZURE_OPENAI_KEY = os.getenv("AZURE_OPENAI_KEY")
+AZURE_OPENAI_DEPLOYMENT = os.getenv("AZURE_OPENAI_DEPLOYMENT")
 
-# Validate environment variables
 if not VISION_ENDPOINT or not VISION_KEY:
     st.error("Missing VISION_ENDPOINT or VISION_KEY. Please check your .env file.")
     st.stop()
 if not SPEECH_KEY or not SPEECH_REGION:
     st.error("Missing SPEECH_KEY or SPEECH_REGION. Please check your .env file.")
     st.stop()
+if not AZURE_OPENAI_ENDPOINT or not AZURE_OPENAI_KEY or not AZURE_OPENAI_DEPLOYMENT:
+    st.error("Missing AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_KEY, or AZURE_OPENAI_DEPLOYMENT. Please check your .env file.")
+    st.stop()
 
-# Set up Azure AI Vision client
 client = ImageAnalysisClient(endpoint=VISION_ENDPOINT, credential=AzureKeyCredential(VISION_KEY))
 
-# Set up Azure Speech-to-Text client with default microphone
 speech_config = SpeechConfig(subscription=SPEECH_KEY, region=SPEECH_REGION)
 speech_config.speech_recognition_language = "en-US"
 audio_config = AudioConfig(use_default_microphone=True)
 speech_recognizer = SpeechRecognizer(speech_config=speech_config, audio_config=audio_config)
 
-# Streamlit app title
-st.title("Real-Time OCR and Speech-to-Text with Azure AI")
+openai_client = AzureOpenAI(
+    azure_endpoint=AZURE_OPENAI_ENDPOINT,
+    api_key=AZURE_OPENAI_KEY,
+    api_version="2023-07-01-preview"
+)
+
+st.title("Cumulus Powered of Azure AI")
 
 # Custom CSS for better text formatting
 st.markdown("""
@@ -94,17 +101,22 @@ if "last_debug_message" not in st.session_state:
     st.session_state.last_debug_message = None
 if "stream_stopped" not in st.session_state:
     st.session_state.stream_stopped = False
+if "chat_started" not in st.session_state:
+    st.session_state.chat_started = False
+if "chat_messages" not in st.session_state:
+    st.session_state.chat_messages = [{"role": "assistant", "content": "Hello! How can I assist you today?"}]
 
 # Queues for passing STT results and debug messages from callbacks to the main thread
 stt_queue = queue.Queue()
 debug_queue = queue.Queue()
 
-# Placeholder for video feed, OCR extracted text, STT text, debug info, and alerts
+# Placeholder for video feed, OCR extracted text, STT text, debug info, alerts, and chat
 video_placeholder = st.empty()
 ocr_text_placeholder = st.empty()
 stt_text_placeholder = st.empty()
 debug_placeholder = st.empty()
 alert_placeholder = st.empty()
+chat_placeholder = st.empty()
 
 # Display the initial OCR text
 ocr_text_placeholder.markdown(
@@ -123,13 +135,79 @@ debug_placeholder.markdown(
     "<div class='debug-text'><strong>Debug Info:</strong><br>Initializing...</div>",
     unsafe_allow_html=True
 )
-
 # Microphone permission prompt and usage note
 alert_placeholder.markdown(
     "<div class='alert-text'>Please ensure microphone permissions are granted in your browser and system settings.<br>"
     "Note: Pause after speaking to finalize transcription (partial results are still saved).</div>",
     unsafe_allow_html=True
 )
+
+# Start button to enable the chat interface
+if not st.session_state.chat_started:
+    if st.button("Start Chat"):
+        st.session_state.chat_started = True
+        st.rerun()
+
+# Function to read the latest content from a file
+def read_file_content(file_path, default_content=""):
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            content = f.read().strip()
+            return content if content else default_content
+    except FileNotFoundError:
+        return default_content
+
+# Chat interface (only shown after Start button is clicked)
+if st.session_state.chat_started:
+    # Display chat messages
+    for message in st.session_state.chat_messages:
+        with chat_placeholder.container():
+            with st.chat_message(message["role"]):
+                st.markdown(message["content"])
+
+    # Chat input field
+    if prompt := st.chat_input("Type your message here..."):
+        # Add user message to chat history
+        st.session_state.chat_messages.append({"role": "user", "content": prompt})
+        with chat_placeholder.container():
+            with st.chat_message("user"):
+                st.markdown(prompt)
+
+        # Read the latest OCR and STT results from the files
+        ocr_text = read_file_content("ocr_output.txt", "Waiting for text...")
+        stt_text = read_file_content("stt_output.txt", "Waiting for speech...")
+
+        # Generate assistant response using Azure OpenAI
+        try:
+            response = openai_client.chat.completions.create(
+                model=AZURE_OPENAI_DEPLOYMENT,
+                messages=[
+                    {"role": "system", "content": "You are a helpful assistant that provides concise and accurate answers."},
+                    {"role": "user", "content": f"Based on the following OCR text: '{ocr_text}' and speech input: '{stt_text}', answer the following: {prompt}"}
+                ],
+                temperature=0.7,
+                max_tokens=150
+            )
+            assistant_response = response.choices[0].message.content.strip()
+            st.session_state.chat_messages.append({"role": "assistant", "content": assistant_response})
+            with chat_placeholder.container():
+                with st.chat_message("assistant"):
+                    st.markdown(assistant_response)
+
+            # Log the chat interaction
+            logger.info(f"Chat prompt: {prompt}")
+            logger.info(f"Chat response: {assistant_response}")
+            debug_queue.put(f"Chat prompt: {prompt}")
+            debug_queue.put(f"Chat response: {assistant_response}")
+
+        except HttpResponseError as e:
+            error_message = f"Error with Azure OpenAI: {str(e)}"
+            st.session_state.chat_messages.append({"role": "assistant", "content": error_message})
+            with chat_placeholder.container():
+                with st.chat_message("assistant"):
+                    st.markdown(error_message)
+            logger.error(error_message)
+            debug_queue.put(error_message)
 
 # Start the WebRTC stream for video only in SENDONLY mode
 ctx = webrtc_streamer(
@@ -300,19 +378,18 @@ while True:
                         visual_features=["READ"]
                     )
 
-                    # Extract text from the result
+
                     extracted_text = ""
                     if result.read and result.read.blocks:
                         for block in result.read.blocks:
                             for line in block.lines:
                                 extracted_text += line.text + "\n"
 
-                    # Update the extracted text in session state if it has changed
                     new_text = extracted_text.strip()
                     if new_text and new_text != st.session_state.previous_extracted_text:
                         st.session_state.extracted_text = new_text
                         st.session_state.previous_extracted_text = new_text
-                        # Split the text into lines and format as a bullet list
+
                         text_lines = new_text.split("\n")
                         formatted_text = "<div class='extracted-text'><strong>OCR Extracted Text:</strong><ul>"
                         for line in text_lines:
@@ -322,11 +399,9 @@ while True:
                         ocr_text_placeholder.markdown(formatted_text, unsafe_allow_html=True)
                         logger.info(f"Updated OCR extracted text: {st.session_state.extracted_text}")
 
-                        # Write OCR text to file (overwrite) only if text is detected
                         with open(OCR_OUTPUT_FILE, "w", encoding="utf-8") as f:
                             f.write(st.session_state.extracted_text)
 
-                    # Update the last processed time
                     st.session_state.last_processed = current_time
 
                 except Exception as e:
@@ -338,7 +413,6 @@ while True:
                         ocr_text_placeholder.markdown(formatted_text, unsafe_allow_html=True)
                         logger.info(f"Updated OCR extracted text with error: {st.session_state.extracted_text}")
 
-                        # Write error to OCR file
                         with open(OCR_OUTPUT_FILE, "w", encoding="utf-8") as f:
                             f.write(st.session_state.extracted_text)
                     st.session_state.last_processed = current_time
@@ -362,12 +436,10 @@ while True:
             formatted_text = f"<div class='extracted-text'><strong>OCR Extracted Text:</strong><ul><li>{new_text}</li></ul></div>"
             ocr_text_placeholder.markdown(formatted_text, unsafe_allow_html=True)
 
-            # Write to OCR file
             with open(OCR_OUTPUT_FILE, "w", encoding="utf-8") as f:
                 f.write(st.session_state.extracted_text)
         time.sleep(0.1)
 
-    # Update debug messages only if the message changes
     if current_debug_message and current_debug_message != st.session_state.last_debug_message:
         st.session_state.last_debug_message = current_debug_message
         timestamp = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
@@ -376,7 +448,6 @@ while True:
         debug_text = "<div class='debug-text'><strong>Debug Info:</strong><br>" + "<br>".join(st.session_state.debug_messages) + "</div>"
         debug_placeholder.markdown(debug_text, unsafe_allow_html=True)
 
-    # Ensure at least some debug message is logged periodically
     if not current_debug_message:
         current_debug_message = "Main loop running, waiting for frames..."
         if current_debug_message != st.session_state.last_debug_message:

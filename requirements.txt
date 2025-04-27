@@ -6,3 +6,4 @@ azure-ai-vision-imageanalysis
 azure-core
 python-dotenv
 azure-cognitiveservices-speech
+openai
