@@ -1,2 +1,4 @@
 .env
 cumulus_emotion_detection.ipynb
+secrets.toml
+.streamlit/

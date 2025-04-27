@@ -22,13 +22,13 @@ logging.getLogger('azure').setLevel(logging.WARNING)
 logging.getLogger('azure.core.pipeline.policies.http_logging_policy').setLevel(logging.WARNING)
 
 load_dotenv()
-VISION_ENDPOINT = os.getenv("VISION_ENDPOINT")
-VISION_KEY = os.getenv("VISION_KEY")
-SPEECH_KEY = os.getenv("SPEECH_KEY")
-SPEECH_REGION = os.getenv("SPEECH_REGION")
-AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT")
-AZURE_OPENAI_KEY = os.getenv("AZURE_OPENAI_KEY")
-AZURE_OPENAI_DEPLOYMENT = os.getenv("AZURE_OPENAI_DEPLOYMENT")
+VISION_ENDPOINT = st.secrets["VISION_ENDPOINT"]
+VISION_KEY = st.secrets["VISION_KEY"]
+SPEECH_KEY = st.secrets["SPEECH_KEY"]
+SPEECH_REGION = st.secrets["SPEECH_REGION"]
+AZURE_OPENAI_ENDPOINT = st.secrets["AZURE_OPENAI_ENDPOINT"]
+AZURE_OPENAI_KEY = st.secrets["AZURE_OPENAI_KEY"]
+AZURE_OPENAI_DEPLOYMENT = st.secrets["AZURE_OPENAI_DEPLOYMENT"]
 
 if not VISION_ENDPOINT or not VISION_KEY:
     st.error("Missing VISION_ENDPOINT or VISION_KEY. Please check your .env file.")
