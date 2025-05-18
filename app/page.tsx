@@ -33,6 +33,7 @@ import {
     MoveIcon,
 } from "lucide-react";
 import { WebcamCapture } from "@/components/webcam-capture";
+import * as sdk from "microsoft-cognitiveservices-speech-sdk";
 
 interface Message {
     role: "user" | "assistant";
@@ -62,6 +63,8 @@ export default function Home() {
     // Speech recognition state
     const [micActive, setMicActive] = useState(false);
     const [speechText, setSpeechText] = useState("");
+    const [speechError, setSpeechError] = useState<string | null>(null);
+    const recognizerRef = useRef<sdk.SpeechRecognizer | null>(null);
 
     // Summary state
     const [summaryText, setSummaryText] = useState("");
@@ -108,47 +111,13 @@ export default function Home() {
         ]);
     }, []);
 
-    // Function to save extractedText to a file
-    const saveExtractedTextToFile = useCallback(
-        (text: string) => {
-            if (!text || !text.trim()) {
-                addDebugMessage("Skipping file save: extractedText is empty");
-                return;
-            }
-
-            try {
-                // Create a Blob with the text content
-                const blob = new Blob([text], { type: "text/plain" });
-                const url = URL.createObjectURL(blob);
-
-                // Create a temporary anchor element to trigger the download
-                const link = document.createElement("a");
-                link.href = url;
-                link.download = "ocr_output.txt"; // Fixed filename to overwrite
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-
-                // Clean up the URL object
-                URL.revokeObjectURL(url);
-                addDebugMessage(
-                    "Successfully triggered download for ocr_output.txt"
-                );
-            } catch (error) {
-                addDebugMessage(`Error saving extractedText to file: ${error}`);
-            }
-        },
-        [addDebugMessage]
-    );
-
-    // Log extractedText changes, force update, and save to file
+    // Log extractedText changes and force update
     useEffect(() => {
         addDebugMessage(
             `Rendering with extractedText: ${extractedText.slice(0, 50)}...`
         );
         forceUpdate({ type: "FORCE_UPDATE" });
-        saveExtractedTextToFile(extractedText); // Save to file on each update
-    }, [extractedText, addDebugMessage, saveExtractedTextToFile]);
+    }, [extractedText, addDebugMessage]);
 
     // Modified setExtractedText to include logging
     const handleTextExtracted = useCallback(
@@ -173,6 +142,100 @@ export default function Home() {
     useEffect(() => {
         addDebugMessage(`webcamActive changed to: ${webcamActive}`);
     }, [webcamActive, addDebugMessage]);
+
+    // Azure Speech SDK integration for STT
+    const startSpeechRecognition = async () => {
+        try {
+            const speechConfig = sdk.SpeechConfig.fromSubscription(
+                process.env.NEXT_PUBLIC_SPEECH_KEY!,
+                process.env.NEXT_PUBLIC_SPEECH_REGION!
+            );
+            speechConfig.speechRecognitionLanguage = "id-ID";
+
+            const audioConfig = sdk.AudioConfig.fromDefaultMicrophoneInput();
+            recognizerRef.current = new sdk.SpeechRecognizer(
+                speechConfig,
+                audioConfig
+            );
+
+            recognizerRef.current.recognizing = (
+                _s: sdk.Recognizer,
+                e: sdk.SpeechRecognitionEventArgs
+            ) => {
+                if (e.result.text) {
+                    setSpeechText((prev) =>
+                        prev ? `${prev}\n${e.result.text}` : e.result.text
+                    );
+                }
+            };
+
+            recognizerRef.current.recognized = (
+                _s: sdk.Recognizer,
+                e: sdk.SpeechRecognitionEventArgs
+            ) => {
+                if (e.result.text) {
+                    setSpeechText((prev) =>
+                        prev ? `${prev}\n${e.result.text}` : e.result.text
+                    );
+                    addDebugMessage(`Recognized speech: ${e.result.text}`);
+                }
+            };
+            recognizerRef.current.canceled = (s, e) => {
+                const reason = e.reason || "Unknown error";
+                setSpeechError(`Speech recognition canceled: ${reason}`);
+                addDebugMessage(`Speech recognition canceled: ${reason}`);
+                setMicActive(false);
+            };
+
+            recognizerRef.current.sessionStopped = () => {
+                addDebugMessage("Speech recognition session stopped");
+                setMicActive(false);
+            };
+
+            recognizerRef.current.startContinuousRecognitionAsync(
+                () => {
+                    setMicActive(true);
+                    setSpeechError(null);
+                    addDebugMessage("Speech recognition started");
+                },
+                (err: unknown) => {
+                    setSpeechError(
+                        `Failed to start speech recognition: ${err}`
+                    );
+                    addDebugMessage(`Speech recognition error: ${err}`);
+                    setMicActive(false);
+                }
+            );
+        } catch (err) {
+            setSpeechError(`Could not start speech recognition: ${err}`);
+            addDebugMessage(`Speech recognition error: ${err}`);
+            setMicActive(false);
+        }
+    };
+
+    const stopSpeechRecognition = () => {
+        if (recognizerRef.current) {
+            recognizerRef.current.stopContinuousRecognitionAsync(
+                () => {
+                    setMicActive(false);
+                    addDebugMessage("Speech recognition stopped");
+                },
+                (err: unknown) => {
+                    setSpeechError(`Failed to stop speech recognition: ${err}`);
+                    addDebugMessage(`Speech recognition error: ${err}`);
+                }
+            );
+            recognizerRef.current = null;
+        }
+    };
+
+    useEffect(() => {
+        return () => {
+            if (recognizerRef.current) {
+                stopSpeechRecognition();
+            }
+        };
+    }, []);
 
     // Generate summary
     const generateSummary = async () => {
@@ -297,77 +360,6 @@ export default function Home() {
         addDebugMessage("Added test messages");
     };
 
-    // Generate test OCR text
-    const generateTestOCR = () => {
-        const longText = `
-Azure Computer Vision OCR
---------------------------
-The Azure Computer Vision service provides developers with access to advanced algorithms that process images and return information. Computer Vision can analyze images to detect and extract printed or handwritten text.
-
-Key Features:
-• Extract printed and handwritten text from images
-• Support for multiple languages
-• Detect text orientation and language
-• Convert images to structured text output
-• Analyze text layout and relationships
-
-Technical Specifications:
-- API Version: 3.2
-- Supported image formats: JPEG, PNG, GIF, BMP
-- Maximum image size: 4MB
-- Maximum dimensions: 10000 x 10000 pixels
-- Minimum dimensions: 50 x 50 pixels
-
-Sample Response:
-{
-  "language": "en",
-  "textAngle": 0,
-  "orientation": "Up",
-  "regions": [
-    {
-      "boundingBox": "67,51,433,309",
-      "lines": [
-        {
-          "boundingBox": "67,51,433,39",
-          "words": [
-            {
-              "boundingBox": "67,51,94,39",
-              "text": "Azure"
-            },
-            {
-              "boundingBox": "176,51,133,39",
-              "text": "Computer"
-            },
-            {
-              "boundingBox": "325,51,175,39",
-              "text": "Vision"
-            }
-          ]
-        }
-      ]
-    }
-  ]
-}
-    `.trim();
-        setExtractedText(longText);
-        addDebugMessage("Generated test OCR text");
-    };
-
-    // Generate test speech text
-    const generateTestSpeech = () => {
-        const longText = `
-I'm currently testing the speech recognition capabilities of Azure Speech Services. This service provides real-time transcription of spoken language into text. It supports multiple languages and can be customized for specific vocabularies and acoustic environments.
-
-When using speech recognition in applications, it's important to consider factors like background noise, microphone quality, and speaker clarity. The service can handle various accents and speaking styles, but optimal conditions will always yield the best results.
-
-For this demonstration, I'm generating a lengthy speech transcription to test the scrolling functionality of the speech recognition results box. This will help ensure that the user interface properly handles large amounts of text while maintaining readability and accessibility.
-
-Azure Speech Services also supports features like intent recognition, speaker identification, and sentiment analysis when combined with other Azure AI services. This makes it a powerful tool for building voice-enabled applications and natural user interfaces.
-    `.trim();
-        setSpeechText(longText);
-        addDebugMessage("Generated test speech text");
-    };
-
     // Draggable button handlers
     const handleMouseDown = (e: React.MouseEvent) => {
         if (buttonRef.current) {
@@ -462,14 +454,6 @@ Azure Speech Services also supports features like intent recognition, speaker id
                                 <h3 className="text-sm font-medium text-gray-700">
                                     OCR Results:
                                 </h3>
-                                <Button
-                                    onClick={generateTestOCR}
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-6 text-xs"
-                                >
-                                    Generate Test OCR
-                                </Button>
                             </div>
                             <div
                                 className="bg-gray-50 rounded-md p-3 border border-gray-200 overflow-y-auto font-mono text-xs text-black"
@@ -491,26 +475,55 @@ Azure Speech Services also supports features like intent recognition, speaker id
                                 <h3 className="text-sm font-medium text-gray-700">
                                     Speech Recognition:
                                 </h3>
-                                <Button
-                                    onClick={generateTestSpeech}
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-6 text-xs"
-                                >
-                                    Generate Test Speech
-                                </Button>
+                                <div className="flex space-x-2">
+                                    <Button
+                                        onClick={
+                                            micActive
+                                                ? stopSpeechRecognition
+                                                : startSpeechRecognition
+                                        }
+                                        className={
+                                            micActive
+                                                ? "bg-red-500 hover:bg-red-600"
+                                                : "bg-[#0078D4] hover:bg-[#0063B1] flex items-center"
+                                        }
+                                    >
+                                        {micActive ? (
+                                            <>
+                                                <MicOffIcon
+                                                    size={16}
+                                                    className="mr-2"
+                                                />
+                                                Stop Listening
+                                            </>
+                                        ) : (
+                                            <>
+                                                <MicIcon
+                                                    size={16}
+                                                    className="mr-2"
+                                                />
+                                                Start Listening
+                                            </>
+                                        )}
+                                    </Button>
+                                </div>
                             </div>
+                            {speechError && (
+                                <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-2 rounded text-sm mb-2">
+                                    {speechError}
+                                </div>
+                            )}
                             <div
                                 className="bg-gray-50 rounded-md p-3 border border-gray-200 overflow-y-auto font-mono text-xs"
                                 style={{ height: "200px" }}
                             >
                                 {speechText ? (
-                                    <div className="whitespace-pre-line">
+                                    <div className="whitespace-pre-line text-black">
                                         {speechText}
                                     </div>
                                 ) : (
                                     <p className="text-black">
-                                        Waiting for speech input...
+                                        Waiting for speech input
                                     </p>
                                 )}
                             </div>

@@ -171,7 +171,7 @@ export function WebcamCapture({
                         </div>
                     </div>
                 </div>
-                <div className="flex justify-center">
+                <div className="w-full flex justify-end">
                     <Button
                         className="bg-[#0078D4] hover:bg-[#0063B1] flex items-center"
                         onClick={() => {
@@ -246,7 +246,7 @@ export function WebcamCapture({
                     </div>
                 )}
             </div>
-            <div className="flex justify-center">
+            <div className="w-full flex justify-end">
                 {isCameraActive ? (
                     <Button
                         variant="destructive"
