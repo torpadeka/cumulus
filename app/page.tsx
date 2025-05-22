@@ -75,7 +75,7 @@ export default function Home() {
         {
             role: "assistant",
             content:
-                "Hello! I'm Cumulus, your AI assistant. I can see through your camera, listen to your voice, and help answer your questions. How can I assist you today?",
+                "Halo! Saya Cumulus, asisten AI pembantu anda! Apa yang bisa saya bantu?",
         },
     ]);
     const [input, setInput] = useState("");
