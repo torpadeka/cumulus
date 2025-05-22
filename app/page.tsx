@@ -214,6 +214,7 @@ export default function Home() {
                     }
                 }
             };
+            
             recognizerRef.current.canceled = (s, e) => {
                 const reason = e.reason || "Unknown error";
                 setSpeechError(`Speech recognition canceled: ${reason}`);
