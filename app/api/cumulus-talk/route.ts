@@ -1,21 +1,28 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as sdk from "microsoft-cognitiveservices-speech-sdk";
 import { AzureOpenAI } from "openai";
+import ffmpeg from "fluent-ffmpeg";
 import { createReadStream, promises as fsPromises, unlink } from "fs";
 import { promisify } from "util";
 import { join } from "path";
 import { tmpdir } from "os";
+import { exec } from "child_process";
 
-// Promisify fs.unlink for async cleanup
+// Promisify fs.unlink and exec for async cleanup and command execution
 const unlinkAsync = promisify(unlink);
+const execAsync = promisify(exec);
 
 // Configure Azure Speech SDK for STT and TTS
 const speechConfig = sdk.SpeechConfig.fromSubscription(
     process.env.SPEECH_KEY!,
     process.env.SPEECH_REGION!
 );
-speechConfig.speechRecognitionLanguage = "id-ID"; // For STT
-speechConfig.speechSynthesisVoiceName = "id-ID-JennyNeural"; // For TTS
+speechConfig.speechRecognitionLanguage = "en-US"; // For STT
+speechConfig.speechSynthesisVoiceName = "id-ID-ArdiNeural";
+
+ffmpeg.setFfmpegPath(
+    "C:\\Users\\indod\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\\ffmpeg-7.1.1-full_build\\bin\\ffmpeg.exe"
+);
 
 export async function POST(req: NextRequest) {
     try {
@@ -30,65 +37,131 @@ export async function POST(req: NextRequest) {
             );
         }
 
-        // Step 2: Convert the incoming WebM audio to WAV using webm-to-wav-converter
+        // Step 2: Convert the incoming WebM audio to WAV using fluent-ffmpeg
+        const tempWebmPath = join(tmpdir(), `input-${Date.now()}.webm`);
         const tempWavPath = join(tmpdir(), `stt-${Date.now()}.wav`);
         const arrayBuffer = await audioFile.arrayBuffer();
         const audioBuffer = Buffer.from(arrayBuffer);
 
-        // Convert Buffer to Blob (webm-to-wav-converter expects a Blob or array of Blobs)
-        const wavBlob = new Blob([audioBuffer], { type: "audio/wav" });
+        await fsPromises.writeFile(tempWebmPath, audioBuffer);
 
-        // Convert WAV Blob to Buffer to write to file
-        const wavArrayBuffer = await wavBlob.arrayBuffer();
-        const wavBuffer = Buffer.from(wavArrayBuffer);
-        await fsPromises.writeFile(tempWavPath, wavBuffer);
+        await new Promise((resolve, reject) => {
+            ffmpeg(tempWebmPath)
+                .audioChannels(1) // Mono
+                .audioFrequency(16000) // 16 kHz
+                .format("wav")
+                .audioCodec("pcm_s16le") // 16-bit
+                .on("end", resolve)
+                .on("error", (err) =>
+                    reject(new Error(`FFmpeg error: ${err.message}`))
+                )
+                .save(tempWavPath);
+        });
+
+        // Verify WAV file format (tolerate FFmpeg's non-zero exit code)
+        try {
+            const { stderr: wavInfo } = await execAsync(
+                `C:\\Users\\indod\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\\ffmpeg-7.1.1-full_build\\bin\\ffmpeg.exe -i ${tempWavPath}`,
+                { encoding: "utf8" }
+            );
+            console.log("WAV file info:", wavInfo);
+        } catch (err: any) {
+            console.log("WAV file info (via stderr):", err.stderr);
+            // Proceed despite the error, as this is just for debugging
+        }
+
+        // Clean up the input WebM file
+        await unlinkAsync(tempWebmPath);
 
         // Step 3: Perform STT (Speech-to-Text)
         const pushStream = sdk.AudioInputStream.createPushStream();
         const wavStream = createReadStream(tempWavPath);
+        let bytesWritten = 0;
         wavStream.on("data", (chunk) => {
             const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-            // Convert Buffer to ArrayBuffer by slicing the underlying buffer
             const arrayBuffer = buffer.buffer.slice(
                 buffer.byteOffset,
                 buffer.byteOffset + buffer.byteLength
             ) as ArrayBuffer;
             pushStream.write(arrayBuffer);
+            bytesWritten += buffer.length;
+            console.log(`Wrote ${buffer.length} bytes, total: ${bytesWritten}`);
         });
 
         wavStream.on("end", () => {
+            console.log(`Stream ended, total bytes written: ${bytesWritten}`);
+            pushStream.close(); // Reintroduce explicit stream closure
+        });
+
+        wavStream.on("error", (err) => {
+            console.error("Stream error:", err);
             pushStream.close();
         });
 
         const audioConfig = sdk.AudioConfig.fromStreamInput(pushStream);
         const recognizer = new sdk.SpeechRecognizer(speechConfig, audioConfig);
 
-        const transcribedText = await new Promise<string>((resolve, reject) => {
-            let text = "";
+        const transcribedText = await Promise.race([
+            new Promise<string>((resolve, reject) => {
+                let text = "";
 
-            recognizer.recognized = (_s, e) => {
-                if (e.result.reason === sdk.ResultReason.RecognizedSpeech) {
-                    text += (text ? "\n" : "") + e.result.text;
-                }
-            };
+                recognizer.recognized = (_s, e) => {
+                    if (e.result.reason === sdk.ResultReason.RecognizedSpeech) {
+                        text += (text ? "\n" : "") + e.result.text;
+                        console.log("Recognized:", e.result.text);
+                    } else {
+                        console.log("Recognition event:", e.result.reason);
+                    }
+                };
 
-            recognizer.canceled = (_s, e) => {
-                const reason = e.reason || "Unknown error";
-                reject(new Error(`Speech recognition canceled: ${reason}`));
-            };
+                recognizer.canceled = (_s, e) => {
+                    console.error("Cancellation details:", {
+                        errorCode: e.errorCode,
+                        errorDetails: e.errorDetails,
+                        reason: e.reason,
+                    });
+                    const reason = e.reason || "Unknown error";
+                    if (reason === sdk.CancellationReason.EndOfStream) {
+                        console.log(
+                            "End of stream detected, resolving with current text"
+                        );
+                        resolve(text); // Resolve with text if it's just EndOfStream
+                    } else {
+                        reject(
+                            new Error(
+                                `Speech recognition canceled: ${reason}, Code: ${e.errorCode}, Details: ${e.errorDetails}`
+                            )
+                        );
+                    }
+                };
 
-            recognizer.sessionStopped = () => {
-                recognizer.close();
-                resolve(text);
-            };
+                recognizer.sessionStopped = () => {
+                    console.log("Session stopped");
+                    recognizer.close();
+                    resolve(text); // Ensure resolution on session end
+                };
 
-            recognizer.startContinuousRecognitionAsync(
-                () => {},
-                (err) => {
-                    reject(new Error(`Failed to start recognition: ${err}`));
-                }
-            );
-        });
+                recognizer.startContinuousRecognitionAsync(
+                    () => {
+                        console.log("Recognition started");
+                    },
+                    (err) => {
+                        reject(
+                            new Error(`Failed to start recognition: ${err}`)
+                        );
+                    }
+                );
+            }),
+            new Promise((_, reject) =>
+                setTimeout(
+                    () =>
+                        reject(
+                            new Error("Recognition timed out after 30 seconds")
+                        ),
+                    30000
+                )
+            ), // 30-second timeout
+        ]);
 
         if (!transcribedText) {
             await unlinkAsync(tempWavPath);
@@ -106,11 +179,15 @@ export async function POST(req: NextRequest) {
             apiVersion: "2023-07-01-preview",
         });
 
+        const cumulusPrompt =
+            "Anda adalah chatbot Cumulus, sebuah platform pembelajaran guru-siswa yang membaca teks papan tulis dengan OCR secara langsung, dan mendengar perkataan guru yang diubah menjadi teks dengan Speech-to-Text. Tugas anda adalah untuk menggunakan kedua data ini sebagai konteks untuk menjawab pertanyaan murid. Ketika merespon, jangan katakan 'saya akan membantu' atau pembuka yang terlalu bertele-tele dan tidak berhubungan dan langsung menjawab prompt dari murid tanpa membahas atau memberitahu isi dari data OCR maupun STT. Berikut adalah data yang tersedia:";
+        const userPrompt = `Murid menanyakan hal ini: "${transcribedText}". Tolong respon sebagai assistant murid tersebut, dengan menggunakan data OCR dan STT tersebut sebagai konteks untuk merespon.`;
+
         const gptResponse = await client.chat.completions.create({
             model: process.env.AZURE_OPENAI_DEPLOYMENT!,
             messages: [
-                { role: "system", content: "You are a helpful AI assistant." },
-                { role: "user", content: transcribedText },
+                { role: "system", content: cumulusPrompt },
+                { role: "user", content: userPrompt },
             ],
             temperature: 0.7,
             max_tokens: 500,
