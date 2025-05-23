@@ -17,7 +17,7 @@ const speechConfig = sdk.SpeechConfig.fromSubscription(
     process.env.SPEECH_KEY!,
     process.env.SPEECH_REGION!
 );
-speechConfig.speechRecognitionLanguage = "en-US"; // For STT
+speechConfig.speechRecognitionLanguage = "id-ID"; // For STT
 speechConfig.speechSynthesisVoiceName = "id-ID-ArdiNeural";
 
 ffmpeg.setFfmpegPath(
