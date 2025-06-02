@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
         const response = await client.chat.completions.create({
             model: process.env.NEXT_PUBLIC_AZURE_OPENAI_DEPLOYMENT!,
             messages: [
-                { role: "system", content: "You are a helpful AI assistant." },
+                { role: "system", content: "You are a summarizer of STT notes meant to summarize transcribed text to help deaf students." },
                 { role: "user", content: prompt },
             ],
             temperature: 0.7,
