@@ -98,6 +98,7 @@ export async function GET(request: NextRequest) {
                 userId: new ObjectId(decoded.userId),
                 dateKey: targetDate,
             })
+            .sort({ timestamp: -1 })
             .limit(100)
             .toArray();
 
