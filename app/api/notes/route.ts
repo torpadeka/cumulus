@@ -1,107 +1,156 @@
-import { type NextRequest, NextResponse } from "next/server"
-import { promises as fs } from "fs"
-import path from "path"
-
-interface Note {
-  id: string
-  text: string
-  timestamp: string
-  deviceId?: string
-}
-
-const NOTES_FILE_PATH = path.join(process.cwd(), "data", "notes.json")
-
-// Ensure the data directory exists
-async function ensureDataDirectory() {
-  const dataDir = path.dirname(NOTES_FILE_PATH)
-  try {
-    await fs.access(dataDir)
-  } catch {
-    await fs.mkdir(dataDir, { recursive: true })
-  }
-}
-
-// Read notes from file
-async function readNotesFromFile(): Promise<Note[]> {
-  try {
-    await ensureDataDirectory()
-    const data = await fs.readFile(NOTES_FILE_PATH, "utf-8")
-    return JSON.parse(data)
-  } catch (error) {
-    // If file doesn't exist or is empty, return empty array
-    return []
-  }
-}
-
-// Write notes to file
-async function writeNotesToFile(notes: Note[]): Promise<void> {
-  await ensureDataDirectory()
-  await fs.writeFile(NOTES_FILE_PATH, JSON.stringify(notes, null, 2))
-}
+import { type NextRequest, NextResponse } from "next/server";
+import clientPromise from "@/lib/mongodb";
+import { verifyToken } from "@/lib/auth";
+import { ObjectId } from "mongodb";
 
 export async function POST(request: NextRequest) {
-  try {
-    const body = await request.json()
-    const { text, deviceId } = body
+    try {
+        const body = await request.json();
+        const { text, deviceId } = body;
 
-    if (!text || typeof text !== "string") {
-      return NextResponse.json({ error: "Text is required and must be a string" }, { status: 400 })
+        if (!text || typeof text !== "string") {
+            return NextResponse.json(
+                { error: "Text is required and must be a string" },
+                { status: 400 }
+            );
+        }
+
+        if (!deviceId) {
+            return NextResponse.json(
+                { error: "Device ID is required" },
+                { status: 400 }
+            );
+        }
+
+        const client = await clientPromise;
+        const db = client.db("cumulus");
+        const users = db.collection("users");
+        const notes = db.collection("notes");
+
+        // Find user by deviceId
+        const user = await users.findOne({ deviceId });
+        if (!user) {
+            return NextResponse.json(
+                { error: "Device not linked to any user" },
+                { status: 404 }
+            );
+        }
+
+        const newNote = {
+            userId: user._id,
+            text: text.trim(),
+            timestamp: new Date(),
+            deviceId: deviceId,
+        };
+
+        const result = await notes.insertOne(newNote);
+
+        return NextResponse.json({
+            success: true,
+            note: { ...newNote, id: result.insertedId },
+            message: "Note received successfully",
+        });
+    } catch (error) {
+        console.error("Error processing note:", error);
+        return NextResponse.json(
+            { error: "Failed to process note" },
+            { status: 500 }
+        );
     }
-
-    // Read existing notes
-    const notes = await readNotesFromFile()
-
-    const newNote: Note = {
-      id: Date.now().toString(),
-      text: text.trim(),
-      timestamp: new Date().toISOString(),
-      deviceId: deviceId || "Unknown Device",
-    }
-
-    // Add new note to the beginning
-    notes.unshift(newNote)
-
-    // Keep only the last 100 notes to prevent file from getting too large
-    if (notes.length > 100) {
-      notes.splice(100)
-    }
-
-    // Write back to file
-    await writeNotesToFile(notes)
-
-    return NextResponse.json({
-      success: true,
-      note: newNote,
-      message: "Note received and saved successfully",
-    })
-  } catch (error) {
-    console.error("Error processing note:", error)
-    return NextResponse.json({ error: "Failed to process note" }, { status: 500 })
-  }
 }
 
-export async function GET() {
-  try {
-    const notes = await readNotesFromFile()
-    return NextResponse.json({
-      notes: notes,
-      count: notes.length,
-    })
-  } catch (error) {
-    console.error("Error reading notes:", error)
-    return NextResponse.json({ error: "Failed to read notes" }, { status: 500 })
-  }
+// Replace the GET function with this updated version that handles the missing index
+export async function GET(request: NextRequest) {
+    try {
+        const token = request.cookies.get("token")?.value;
+
+        if (!token) {
+            return NextResponse.json(
+                { error: "Not authenticated" },
+                { status: 401 }
+            );
+        }
+
+        const decoded = verifyToken(token);
+        if (!decoded) {
+            return NextResponse.json(
+                { error: "Invalid token" },
+                { status: 401 }
+            );
+        }
+
+        const client = await clientPromise;
+        const db = client.db("cumulus");
+        const notes = db.collection("notes");
+
+        // Modified query to avoid sorting which requires an index
+        const userNotes = await notes
+            .find({ userId: new ObjectId(decoded.userId) })
+            .limit(100)
+            .toArray();
+
+        // Sort in memory instead of in the database query
+        const sortedNotes = userNotes.sort((a, b) => {
+            return (
+                new Date(b.timestamp).getTime() -
+                new Date(a.timestamp).getTime()
+            );
+        });
+
+        const formattedNotes = sortedNotes.map((note) => ({
+            id: note._id.toString(),
+            text: note.text,
+            timestamp: note.timestamp.toISOString(),
+            deviceId: note.deviceId,
+        }));
+
+        return NextResponse.json({
+            notes: formattedNotes,
+            count: formattedNotes.length,
+        });
+    } catch (error) {
+        console.error("Error fetching notes:", error);
+        return NextResponse.json(
+            { error: "Failed to fetch notes" },
+            { status: 500 }
+        );
+    }
 }
 
-export async function DELETE() {
-  try {
-    await writeNotesToFile([])
-    return NextResponse.json({
-      success: true,
-      message: "All notes cleared",
-    })
-  } catch (error) {
-    console.error("Error clearing notes:", error)
-    return NextResponse.json({ error: "Failed to clear notes" }, { status: 500 })
-  }
+export async function DELETE(request: NextRequest) {
+    try {
+        const token = request.cookies.get("token")?.value;
+
+        if (!token) {
+            return NextResponse.json(
+                { error: "Not authenticated" },
+                { status: 401 }
+            );
+        }
+
+        const decoded = verifyToken(token);
+        if (!decoded) {
+            return NextResponse.json(
+                { error: "Invalid token" },
+                { status: 401 }
+            );
+        }
+
+        const client = await clientPromise;
+        const db = client.db("cumulus");
+        const notes = db.collection("notes");
+
+        await notes.deleteMany({ userId: new ObjectId(decoded.userId) });
+
+        return NextResponse.json({
+            success: true,
+            message: "All notes cleared",
+        });
+    } catch (error) {
+        console.error("Error clearing notes:", error);
+        return NextResponse.json(
+            { error: "Failed to clear notes" },
+            { status: 500 }
+        );
+    }
 }

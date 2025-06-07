@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -12,6 +13,8 @@ import {
     Wifi,
     WifiOff,
     RefreshCw,
+    LogOut,
+    User,
 } from "lucide-react";
 import {
     Dialog,
@@ -30,7 +33,18 @@ interface Note {
     deviceId?: string;
 }
 
-export default function Component() {
+interface UserType {
+    id: string;
+    username: string;
+    email: string;
+    deviceId?: string;
+}
+
+interface IoTNotesDashboardProps {
+    user: UserType;
+}
+
+export default function IoTNotesDashboard({ user }: IoTNotesDashboardProps) {
     const [notes, setNotes] = useState<Note[]>([]);
     const [isConnected, setIsConnected] = useState(true);
     const [lastReceived, setLastReceived] = useState<Date | null>(null);
@@ -38,6 +52,7 @@ export default function Component() {
     const [showSummaryDialog, setShowSummaryDialog] = useState(false);
     const [summary, setSummary] = useState("");
     const [isSummarizing, setIsSummarizing] = useState(false);
+    const router = useRouter();
 
     // Fetch notes from API
     const fetchNotes = async () => {
@@ -67,7 +82,7 @@ export default function Component() {
         fetchNotes();
 
         // Poll for new notes every 5 seconds
-        const interval = setInterval(fetchNotes, 1000);
+        const interval = setInterval(fetchNotes, 5000);
 
         return () => clearInterval(interval);
     }, []);
@@ -91,8 +106,6 @@ export default function Component() {
     }, [lastReceived]);
 
     const deleteNote = async (id: string) => {
-        // For individual note deletion, we'd need to add a DELETE endpoint with ID
-        // For now, we'll just update the local state and it will sync on next poll
         setNotes((prev) => prev.filter((note) => note.id !== id));
     };
 
@@ -124,6 +137,16 @@ export default function Component() {
         a.download = `iot-notes-${new Date().toISOString().split("T")[0]}.txt`;
         a.click();
         URL.revokeObjectURL(url);
+    };
+
+    const handleLogout = async () => {
+        try {
+            await fetch("/api/auth/logout", { method: "POST" });
+            router.push("/login");
+            router.refresh();
+        } catch (error) {
+            console.error("Logout error:", error);
+        }
     };
 
     const formatTimestamp = (timestamp: string) => {
@@ -191,18 +214,27 @@ export default function Component() {
             {/* Header */}
             <div className="flex items-center justify-between mb-8">
                 <div className="flex items-center gap-3">
-                    <PenTool className="w-8 h-8 text-gray-700" />
+                    <PenTool className="w-8 h-8 text-cyan-500" />
                     <h1 className="text-3xl font-bold text-gray-800">
-                        IoT Notes Dashboard
+                        Cumulus Dashboard
                     </h1>
                 </div>
 
                 <div className="flex items-center gap-3">
                     <div className="flex items-center gap-2 mr-4">
+                        <User className="w-4 h-4 text-gray-600" />
+                        <span className="text-sm text-gray-600">
+                            {user.username}
+                        </span>
+                        <Badge variant="outline" className="text-xs">
+                            {user.deviceId}
+                        </Badge>
+                    </div>
+                    <div className="flex items-center gap-2 mr-4">
                         {isConnected ? (
                             <>
-                                <Wifi className="w-4 h-4 text-green-500" />
-                                <span className="text-sm text-green-600">
+                                <Wifi className="w-4 h-4 text-cyan-500" />
+                                <span className="text-sm text-cyan-600">
                                     Connected
                                 </span>
                             </>
@@ -246,27 +278,31 @@ export default function Component() {
                         <Trash2 className="w-4 h-4 mr-2" />
                         Clear All
                     </Button>
+                    <Button onClick={handleLogout} variant="outline" size="sm">
+                        <LogOut className="w-4 h-4 mr-2" />
+                        Logout
+                    </Button>
                 </div>
             </div>
 
             <div className="max-w-4xl mx-auto">
                 {/* Connection Status */}
-                <Card className="mb-6 bg-white">
+                <Card className="mb-6 bg-white border-l-4 border-l-cyan-500">
                     <CardContent className="py-4">
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-3">
                                 <div
                                     className={`w-3 h-3 rounded-full ${
                                         isConnected
-                                            ? "bg-green-500"
+                                            ? "bg-cyan-500"
                                             : "bg-red-500"
                                     }`}
                                 ></div>
                                 <span
                                     className={`text-sm font-medium ${
                                         isConnected
-                                            ? "text-green-500"
-                                            : "text-red-500"
+                                            ? "text-cyan-600"
+                                            : "text-red-600"
                                     }`}
                                 >
                                     {isConnected
@@ -290,9 +326,12 @@ export default function Component() {
                 <div>
                     <div className="flex items-center justify-between mb-4">
                         <h2 className="text-xl font-semibold text-gray-800">
-                            Received Notes
+                            Your Notes
                         </h2>
-                        <Badge variant="secondary" className="text-sm">
+                        <Badge
+                            variant="secondary"
+                            className="text-sm bg-cyan-100 text-cyan-700"
+                        >
                             {notes.length}{" "}
                             {notes.length === 1 ? "note" : "notes"}
                         </Badge>
@@ -306,8 +345,8 @@ export default function Component() {
                                     No notes received yet.
                                 </p>
                                 <p className="text-sm text-gray-400 mt-2">
-                                    Waiting for your IoT device to send
-                                    transcribed text...
+                                    Your IoT device will automatically send
+                                    transcribed text here.
                                 </p>
                             </CardContent>
                         </Card>
@@ -316,7 +355,7 @@ export default function Component() {
                             {notes.map((note) => (
                                 <Card
                                     key={note.id}
-                                    className="bg-white hover:shadow-md transition-shadow"
+                                    className="bg-white hover:shadow-md transition-shadow border-l-2 border-l-cyan-200"
                                 >
                                     <CardHeader className="pb-2">
                                         <div className="flex items-center justify-between">
@@ -330,7 +369,7 @@ export default function Component() {
                                                 {note.deviceId && (
                                                     <Badge
                                                         variant="outline"
-                                                        className="text-xs"
+                                                        className="text-xs border-cyan-200 text-cyan-700"
                                                     >
                                                         {note.deviceId}
                                                     </Badge>
@@ -363,7 +402,7 @@ export default function Component() {
             {notes.length > 0 && (
                 <Button
                     onClick={summarizeNotes}
-                    className="fixed bottom-6 right-6 h-14 px-6 bg-blue-600 hover:bg-blue-700 text-white shadow-lg"
+                    className="fixed bottom-6 right-6 h-14 px-6 bg-cyan-500 hover:bg-cyan-600 text-white shadow-lg"
                     disabled={isSummarizing}
                 >
                     <Sparkles className="w-5 h-5 mr-2" />
@@ -379,7 +418,7 @@ export default function Component() {
                 <DialogContent className="max-w-3xl max-h-[80vh]">
                     <DialogHeader>
                         <DialogTitle className="flex items-center gap-2">
-                            <Sparkles className="w-5 h-5" />
+                            <Sparkles className="w-5 h-5 text-cyan-500" />
                             Notes Summary
                         </DialogTitle>
                         <DialogDescription>
@@ -389,7 +428,7 @@ export default function Component() {
                     <div className="mt-4">
                         {isSummarizing ? (
                             <div className="flex items-center justify-center py-8">
-                                <RefreshCw className="w-6 h-6 animate-spin mr-2" />
+                                <RefreshCw className="w-6 h-6 animate-spin mr-2 text-cyan-500" />
                                 <span>Generating summary...</span>
                             </div>
                         ) : (
@@ -449,7 +488,7 @@ export default function Component() {
                                                     </code>
                                                 ),
                                                 blockquote: ({ children }) => (
-                                                    <blockquote className="border-l-4 border-gray-300 pl-4 italic text-gray-600 mb-3">
+                                                    <blockquote className="border-l-4 border-cyan-300 pl-4 italic text-gray-600 mb-3">
                                                         {children}
                                                     </blockquote>
                                                 ),
@@ -465,6 +504,7 @@ export default function Component() {
                                             onClick={copySummaryToClipboard}
                                             variant="outline"
                                             size="sm"
+                                            className="border-cyan-200 text-cyan-700 hover:bg-cyan-50"
                                         >
                                             <Copy className="w-4 h-4 mr-2" />
                                             Copy Summary
