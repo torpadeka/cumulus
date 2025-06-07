@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import {
-  PenTool,
   Trash2,
   Download,
   Clock,
@@ -18,6 +17,7 @@ import {
   ChevronLeft,
   ChevronRight,
   CalendarIcon,
+  Cloud,
 } from "lucide-react"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Sparkles, Copy, Languages } from "lucide-react"
@@ -273,7 +273,7 @@ export default function IoTNotesDashboard({ user }: IoTNotesDashboardProps) {
       <div className="mb-8 p-6 -m-6" style={{ backgroundColor: "#005485" }}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <PenTool className="w-8 h-8 text-white" />
+            <Cloud className="w-8 h-8 text-white" />
             <h1 className="text-3xl font-bold text-white">Cumulus Dashboard</h1>
           </div>
 

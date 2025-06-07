@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { PenTool, Mic, MicOff, Trash2, Download, Clock } from "lucide-react";
+import { Mic, MicOff, Trash2, Download, Clock, Cloud } from "lucide-react";
 
 interface Note {
     id: string;
@@ -112,7 +112,7 @@ export default function Component() {
             {/* Header */}
             <div className="flex items-center justify-between mb-8">
                 <div className="flex items-center gap-3">
-                    <PenTool className="w-8 h-8 text-gray-700" />
+                    <Cloud className="w-8 h-8 text-gray-700" />
                     <h1 className="text-3xl font-bold text-gray-800">
                         Live Notes Dashboard
                     </h1>

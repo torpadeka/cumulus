@@ -2,7 +2,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-    PenTool,
     MessageSquare,
     BookOpen,
     FileText,
@@ -16,6 +15,7 @@ import {
     Grid3X3,
     Folder,
     Brain,
+    Cloud,
 } from "lucide-react";
 
 export default function Component() {
@@ -23,7 +23,7 @@ export default function Component() {
         <div className="min-h-screen bg-gray-50 p-6">
             {/* Header */}
             <div className="flex items-center gap-3 mb-8">
-                <PenTool className="w-8 h-8 text-gray-700" />
+                <Cloud className="w-8 h-8 text-gray-700" />
                 <h1 className="text-3xl font-bold text-gray-800">
                     Notes Dashboard
                 </h1>

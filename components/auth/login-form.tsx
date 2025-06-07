@@ -15,7 +15,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { PenTool, Loader2 } from "lucide-react";
+import { Loader2, Cloud } from "lucide-react";
 import Link from "next/link";
 
 export default function LoginForm() {
@@ -57,7 +57,7 @@ export default function LoginForm() {
             <Card className="w-full max-w-md">
                 <CardHeader className="text-center">
                     <div className="flex items-center justify-center gap-2 mb-4">
-                        <PenTool className="w-8 h-8 text-cyan-500" />
+                        <Cloud className="w-8 h-8 text-cyan-500" />
                         <h1 className="text-2xl font-bold text-gray-800">
                             Cumulus
                         </h1>
