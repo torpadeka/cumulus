@@ -6,6 +6,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
+import {
     PenTool,
     Trash2,
     Download,
@@ -15,6 +22,9 @@ import {
     RefreshCw,
     LogOut,
     User,
+    ChevronLeft,
+    ChevronRight,
+    Calendar,
 } from "lucide-react";
 import {
     Dialog,
@@ -23,13 +33,14 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog";
-import { Sparkles, Copy } from "lucide-react";
+import { Sparkles, Copy, Languages } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 
 interface Note {
     id: string;
     text: string;
     timestamp: string;
+    dateKey: string;
     deviceId?: string;
 }
 
@@ -46,19 +57,40 @@ interface IoTNotesDashboardProps {
 
 export default function IoTNotesDashboard({ user }: IoTNotesDashboardProps) {
     const [notes, setNotes] = useState<Note[]>([]);
+    const [availableDates, setAvailableDates] = useState<string[]>([]);
+    const [currentDate, setCurrentDate] = useState<string>(
+        new Date().toISOString().split("T")[0]
+    );
     const [isConnected, setIsConnected] = useState(true);
     const [lastReceived, setLastReceived] = useState<Date | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [showSummaryDialog, setShowSummaryDialog] = useState(false);
     const [summary, setSummary] = useState("");
     const [isSummarizing, setIsSummarizing] = useState(false);
+    const [summaryLanguage, setSummaryLanguage] = useState<
+        "english" | "indonesian"
+    >("english");
     const router = useRouter();
 
-    // Fetch notes from API
-    const fetchNotes = async () => {
+    // Fetch available dates
+    const fetchAvailableDates = async () => {
+        try {
+            const response = await fetch("/api/notes/dates");
+            if (response.ok) {
+                const data = await response.json();
+                setAvailableDates(data.dates || []);
+            }
+        } catch (error) {
+            console.error("Error fetching dates:", error);
+        }
+    };
+
+    // Fetch notes for specific date
+    const fetchNotes = async (date?: string) => {
         try {
             setIsLoading(true);
-            const response = await fetch("/api/notes");
+            const targetDate = date || currentDate;
+            const response = await fetch(`/api/notes?date=${targetDate}`);
             if (response.ok) {
                 const data = await response.json();
                 setNotes(data.notes || []);
@@ -77,15 +109,21 @@ export default function IoTNotesDashboard({ user }: IoTNotesDashboardProps) {
         }
     };
 
-    // Initial load and polling
+    // Initial load
     useEffect(() => {
+        fetchAvailableDates();
         fetchNotes();
 
-        // Poll for new notes every 5 seconds
-        const interval = setInterval(fetchNotes, 5000);
+        // Poll for new notes every 5 seconds (only for current date)
+        const interval = setInterval(() => {
+            const today = new Date().toISOString().split("T")[0];
+            if (currentDate === today) {
+                fetchNotes();
+            }
+        }, 5000);
 
         return () => clearInterval(interval);
-    }, []);
+    }, [currentDate]);
 
     // Check connection status
     useEffect(() => {
@@ -95,12 +133,11 @@ export default function IoTNotesDashboard({ user }: IoTNotesDashboardProps) {
                 lastReceived &&
                 now.getTime() - lastReceived.getTime() > 300000
             ) {
-                // 5 minutes
                 setIsConnected(false);
             } else if (lastReceived) {
                 setIsConnected(true);
             }
-        }, 30000); // Check every 30 seconds
+        }, 30000);
 
         return () => clearInterval(checkConnection);
     }, [lastReceived]);
@@ -109,11 +146,14 @@ export default function IoTNotesDashboard({ user }: IoTNotesDashboardProps) {
         setNotes((prev) => prev.filter((note) => note.id !== id));
     };
 
-    const clearAllNotes = async () => {
+    const clearDayNotes = async () => {
         try {
-            const response = await fetch("/api/notes", { method: "DELETE" });
+            const response = await fetch(`/api/notes?date=${currentDate}`, {
+                method: "DELETE",
+            });
             if (response.ok) {
                 setNotes([]);
+                fetchAvailableDates(); // Refresh available dates
             }
         } catch (error) {
             console.error("Error clearing notes:", error);
@@ -134,7 +174,7 @@ export default function IoTNotesDashboard({ user }: IoTNotesDashboardProps) {
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = `iot-notes-${new Date().toISOString().split("T")[0]}.txt`;
+        a.download = `notes-${currentDate}.txt`;
         a.click();
         URL.revokeObjectURL(url);
     };
@@ -158,7 +198,33 @@ export default function IoTNotesDashboard({ user }: IoTNotesDashboardProps) {
         if (diffMins < 1) return "Just now";
         if (diffMins < 60) return `${diffMins}m ago`;
         if (diffMins < 1440) return `${Math.floor(diffMins / 60)}h ago`;
-        return date.toLocaleDateString();
+        return date.toLocaleTimeString();
+    };
+
+    const formatDate = (dateString: string) => {
+        const date = new Date(dateString);
+        const today = new Date().toISOString().split("T")[0];
+        const yesterday = new Date(Date.now() - 86400000)
+            .toISOString()
+            .split("T")[0];
+
+        if (dateString === today) return "Today";
+        if (dateString === yesterday) return "Yesterday";
+        return date.toLocaleDateString("en-US", {
+            weekday: "long",
+            year: "numeric",
+            month: "long",
+            day: "numeric",
+        });
+    };
+
+    const navigateDate = (direction: "prev" | "next") => {
+        const currentIndex = availableDates.indexOf(currentDate);
+        if (direction === "prev" && currentIndex < availableDates.length - 1) {
+            setCurrentDate(availableDates[currentIndex + 1]);
+        } else if (direction === "next" && currentIndex > 0) {
+            setCurrentDate(availableDates[currentIndex - 1]);
+        }
     };
 
     const summarizeNotes = async () => {
@@ -169,7 +235,6 @@ export default function IoTNotesDashboard({ user }: IoTNotesDashboardProps) {
         setSummary("");
 
         try {
-            // Prepare the notes text for summarization
             const notesText = notes
                 .map((note) => {
                     const date = new Date(note.timestamp).toLocaleString();
@@ -179,14 +244,15 @@ export default function IoTNotesDashboard({ user }: IoTNotesDashboardProps) {
                 })
                 .join("\n\n");
 
-            const prompt = `Please provide a comprehensive summary of the following transcribed notes. Focus on key topics, important decisions, action items, and main themes discussed:\n\n${notesText}.\n\nPlease focus on just giving the summary to the best of your ability`;
-
             const response = await fetch("/api/gpt", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
                 },
-                body: JSON.stringify({ prompt }),
+                body: JSON.stringify({
+                    prompt: notesText,
+                    language: summaryLanguage,
+                }),
             });
 
             if (response.ok) {
@@ -208,6 +274,11 @@ export default function IoTNotesDashboard({ user }: IoTNotesDashboardProps) {
     const copySummaryToClipboard = () => {
         navigator.clipboard.writeText(summary);
     };
+
+    const isToday = currentDate === new Date().toISOString().split("T")[0];
+    const currentDateIndex = availableDates.indexOf(currentDate);
+    const canGoNext = currentDateIndex > 0;
+    const canGoPrev = currentDateIndex < availableDates.length - 1;
 
     return (
         <div className="min-h-screen bg-gray-50 p-6">
@@ -248,7 +319,7 @@ export default function IoTNotesDashboard({ user }: IoTNotesDashboardProps) {
                         )}
                     </div>
                     <Button
-                        onClick={fetchNotes}
+                        onClick={() => fetchNotes()}
                         variant="outline"
                         size="sm"
                         disabled={isLoading}
@@ -270,13 +341,13 @@ export default function IoTNotesDashboard({ user }: IoTNotesDashboardProps) {
                         Export
                     </Button>
                     <Button
-                        onClick={clearAllNotes}
+                        onClick={clearDayNotes}
                         variant="outline"
                         size="sm"
                         disabled={notes.length === 0}
                     >
                         <Trash2 className="w-4 h-4 mr-2" />
-                        Clear All
+                        Clear Day
                     </Button>
                     <Button onClick={handleLogout} variant="outline" size="sm">
                         <LogOut className="w-4 h-4 mr-2" />
@@ -286,39 +357,62 @@ export default function IoTNotesDashboard({ user }: IoTNotesDashboardProps) {
             </div>
 
             <div className="max-w-4xl mx-auto">
-                {/* Connection Status */}
+                {/* Date Navigation */}
                 <Card className="mb-6 bg-white border-l-4 border-l-cyan-500">
                     <CardContent className="py-4">
                         <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-3">
-                                <div
-                                    className={`w-3 h-3 rounded-full ${
-                                        isConnected
-                                            ? "bg-cyan-500"
-                                            : "bg-red-500"
-                                    }`}
-                                ></div>
-                                <span
-                                    className={`text-sm font-medium ${
-                                        isConnected
-                                            ? "text-cyan-600"
-                                            : "text-red-600"
-                                    }`}
-                                >
-                                    {isConnected
-                                        ? "IoT Device Connected"
-                                        : "Waiting for IoT Device..."}
-                                </span>
+                            <div className="flex items-center gap-4">
+                                <Calendar className="w-5 h-5 text-cyan-500" />
+                                <h3 className="text-lg font-semibold text-gray-800">
+                                    {formatDate(currentDate)}
+                                </h3>
+                                {isToday && (
+                                    <Badge className="bg-cyan-100 text-cyan-700 border-cyan-200">
+                                        Live
+                                    </Badge>
+                                )}
                             </div>
-                            {lastReceived && (
-                                <span className="text-sm text-gray-500">
-                                    Last received:{" "}
-                                    {formatTimestamp(
-                                        lastReceived.toISOString()
-                                    )}
-                                </span>
-                            )}
+                            <div className="flex items-center gap-2">
+                                <Button
+                                    onClick={() => navigateDate("prev")}
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={!canGoPrev}
+                                >
+                                    <ChevronLeft className="w-4 h-4" />
+                                    Older
+                                </Button>
+                                <Button
+                                    onClick={() =>
+                                        setCurrentDate(
+                                            new Date()
+                                                .toISOString()
+                                                .split("T")[0]
+                                        )
+                                    }
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={isToday}
+                                >
+                                    Today
+                                </Button>
+                                <Button
+                                    onClick={() => navigateDate("next")}
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={!canGoNext}
+                                >
+                                    Newer
+                                    <ChevronRight className="w-4 h-4" />
+                                </Button>
+                            </div>
                         </div>
+                        {lastReceived && isToday && (
+                            <div className="mt-2 text-sm text-gray-500">
+                                Last received:{" "}
+                                {formatTimestamp(lastReceived.toISOString())}
+                            </div>
+                        )}
                     </CardContent>
                 </Card>
 
@@ -326,7 +420,7 @@ export default function IoTNotesDashboard({ user }: IoTNotesDashboardProps) {
                 <div>
                     <div className="flex items-center justify-between mb-4">
                         <h2 className="text-xl font-semibold text-gray-800">
-                            Your Notes
+                            Notes for {formatDate(currentDate)}
                         </h2>
                         <Badge
                             variant="secondary"
@@ -340,14 +434,20 @@ export default function IoTNotesDashboard({ user }: IoTNotesDashboardProps) {
                     {notes.length === 0 ? (
                         <Card className="bg-white">
                             <CardContent className="py-12 text-center">
-                                <Wifi className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                                <Calendar className="w-12 h-12 text-gray-400 mx-auto mb-4" />
                                 <p className="text-gray-500">
-                                    No notes received yet.
+                                    {isToday
+                                        ? "No notes received today yet."
+                                        : `No notes found for ${formatDate(
+                                              currentDate
+                                          )}.`}
                                 </p>
-                                <p className="text-sm text-gray-400 mt-2">
-                                    Your IoT device will automatically send
-                                    transcribed text here.
-                                </p>
+                                {isToday && (
+                                    <p className="text-sm text-gray-400 mt-2">
+                                        Your IoT device will automatically send
+                                        transcribed text here.
+                                    </p>
+                                )}
                             </CardContent>
                         </Card>
                     ) : (
@@ -398,6 +498,7 @@ export default function IoTNotesDashboard({ user }: IoTNotesDashboardProps) {
                     )}
                 </div>
             </div>
+
             {/* Floating Summarize Button */}
             {notes.length > 0 && (
                 <Button
@@ -419,19 +520,62 @@ export default function IoTNotesDashboard({ user }: IoTNotesDashboardProps) {
                     <DialogHeader>
                         <DialogTitle className="flex items-center gap-2">
                             <Sparkles className="w-5 h-5 text-cyan-500" />
-                            Notes Summary
+                            Notes Summary - {formatDate(currentDate)}
                         </DialogTitle>
                         <DialogDescription>
-                            AI-generated summary of all your transcribed notes
+                            AI-generated summary of your transcribed notes
                         </DialogDescription>
                     </DialogHeader>
                     <div className="mt-4">
+                        {!isSummarizing && !summary && (
+                            <div className="space-y-4">
+                                <div className="flex items-center gap-2">
+                                    <Languages className="w-4 h-4 text-gray-600" />
+                                    <span className="text-sm font-medium text-gray-700">
+                                        Summary Language:
+                                    </span>
+                                </div>
+                                <Select
+                                    value={summaryLanguage}
+                                    onValueChange={(
+                                        value: "english" | "indonesian"
+                                    ) => setSummaryLanguage(value)}
+                                >
+                                    <SelectTrigger className="w-48">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="english">
+                                            English
+                                        </SelectItem>
+                                        <SelectItem value="indonesian">
+                                            Bahasa Indonesia
+                                        </SelectItem>
+                                    </SelectContent>
+                                </Select>
+                                <Button
+                                    onClick={summarizeNotes}
+                                    className="w-full bg-cyan-500 hover:bg-cyan-600"
+                                    disabled={isSummarizing}
+                                >
+                                    <Sparkles className="w-4 h-4 mr-2" />
+                                    Generate Summary
+                                </Button>
+                            </div>
+                        )}
+
                         {isSummarizing ? (
                             <div className="flex items-center justify-center py-8">
                                 <RefreshCw className="w-6 h-6 animate-spin mr-2 text-cyan-500" />
-                                <span>Generating summary...</span>
+                                <span>
+                                    Generating summary in{" "}
+                                    {summaryLanguage === "english"
+                                        ? "English"
+                                        : "Bahasa Indonesia"}
+                                    ...
+                                </span>
                             </div>
-                        ) : (
+                        ) : summary ? (
                             <div className="space-y-4">
                                 <div className="max-h-96 overflow-y-auto p-4 bg-gray-50 rounded-lg">
                                     <div className="prose prose-sm max-w-none text-gray-700">
@@ -494,12 +638,30 @@ export default function IoTNotesDashboard({ user }: IoTNotesDashboardProps) {
                                                 ),
                                             }}
                                         >
-                                            {summary || "No summary available."}
+                                            {summary}
                                         </ReactMarkdown>
                                     </div>
                                 </div>
-                                {summary && (
-                                    <div className="flex justify-end">
+                                <div className="flex justify-between items-center">
+                                    <Badge
+                                        variant="outline"
+                                        className="text-xs"
+                                    >
+                                        {summaryLanguage === "english"
+                                            ? "English"
+                                            : "Bahasa Indonesia"}
+                                    </Badge>
+                                    <div className="flex gap-2">
+                                        <Button
+                                            onClick={() => {
+                                                setSummary("");
+                                                setIsSummarizing(false);
+                                            }}
+                                            variant="outline"
+                                            size="sm"
+                                        >
+                                            Generate New
+                                        </Button>
                                         <Button
                                             onClick={copySummaryToClipboard}
                                             variant="outline"
@@ -510,9 +672,9 @@ export default function IoTNotesDashboard({ user }: IoTNotesDashboardProps) {
                                             Copy Summary
                                         </Button>
                                     </div>
-                                )}
+                                </div>
                             </div>
-                        )}
+                        ) : null}
                     </div>
                 </DialogContent>
             </Dialog>

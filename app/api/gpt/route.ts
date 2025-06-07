@@ -9,7 +9,7 @@ export async function POST(req: NextRequest) {
         );
     }
 
-    const { prompt } = await req.json();
+    const { prompt, language = "english" } = await req.json();
 
     if (!prompt) {
         return NextResponse.json(
@@ -24,6 +24,15 @@ export async function POST(req: NextRequest) {
         "Key:",
         process.env.NEXT_PUBLIC_AZURE_OPENAI_KEY ? "Set" : "Not set"
     );
+
+    const languagePrompts = {
+        english: `Please provide a comprehensive summary of the following transcribed notes in English. Focus on key topics, important decisions, action items, and main themes discussed. Format your response with clear headings and bullet points where appropriate:\n\n${prompt}`,
+        indonesian: `Mohon berikan ringkasan komprehensif dari catatan transkripsi berikut dalam Bahasa Indonesia. Fokus pada topik utama, keputusan penting, item tindakan, dan tema utama yang dibahas. Format respons Anda dengan judul yang jelas dan poin-poin bullet jika diperlukan:\n\n${prompt}`,
+    };
+
+    const finalPrompt =
+        languagePrompts[language as keyof typeof languagePrompts] ||
+        languagePrompts.english;
 
     try {
         // Initialize the AzureOpenAI client
@@ -49,10 +58,7 @@ export async function POST(req: NextRequest) {
         // Make the request to Azure OpenAI's deployment
         const response = await client.chat.completions.create({
             model: process.env.NEXT_PUBLIC_AZURE_OPENAI_DEPLOYMENT!,
-            messages: [
-                { role: "system", content: "You are a summarizer of STT notes meant to summarize transcribed text to help deaf students." },
-                { role: "user", content: prompt },
-            ],
+            messages: [{ role: "user", content: finalPrompt }],
             temperature: 0.7,
             max_tokens: 500,
         });

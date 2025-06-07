@@ -36,10 +36,14 @@ export async function POST(request: NextRequest) {
             );
         }
 
+        const now = new Date();
+        const dateKey = now.toISOString().split("T")[0]; // YYYY-MM-DD format
+
         const newNote = {
             userId: user._id,
             text: text.trim(),
-            timestamp: new Date(),
+            timestamp: now,
+            dateKey: dateKey,
             deviceId: deviceId,
         };
 
@@ -59,7 +63,6 @@ export async function POST(request: NextRequest) {
     }
 }
 
-// Replace the GET function with this updated version that handles the missing index
 export async function GET(request: NextRequest) {
     try {
         const token = request.cookies.get("token")?.value;
@@ -79,17 +82,26 @@ export async function GET(request: NextRequest) {
             );
         }
 
+        const url = new URL(request.url);
+        const dateParam = url.searchParams.get("date");
+
+        // Default to today if no date specified
+        const targetDate = dateParam || new Date().toISOString().split("T")[0];
+
         const client = await clientPromise;
         const db = client.db("cumulus");
         const notes = db.collection("notes");
 
-        // Modified query to avoid sorting which requires an index
+        // Get notes for specific date
         const userNotes = await notes
-            .find({ userId: new ObjectId(decoded.userId) })
+            .find({
+                userId: new ObjectId(decoded.userId),
+                dateKey: targetDate,
+            })
             .limit(100)
             .toArray();
 
-        // Sort in memory instead of in the database query
+        // Sort in memory by timestamp
         const sortedNotes = userNotes.sort((a, b) => {
             return (
                 new Date(b.timestamp).getTime() -
@@ -101,12 +113,14 @@ export async function GET(request: NextRequest) {
             id: note._id.toString(),
             text: note.text,
             timestamp: note.timestamp.toISOString(),
+            dateKey: note.dateKey,
             deviceId: note.deviceId,
         }));
 
         return NextResponse.json({
             notes: formattedNotes,
             count: formattedNotes.length,
+            date: targetDate,
         });
     } catch (error) {
         console.error("Error fetching notes:", error);
@@ -136,15 +150,29 @@ export async function DELETE(request: NextRequest) {
             );
         }
 
+        const url = new URL(request.url);
+        const dateParam = url.searchParams.get("date");
+
         const client = await clientPromise;
         const db = client.db("cumulus");
         const notes = db.collection("notes");
 
-        await notes.deleteMany({ userId: new ObjectId(decoded.userId) });
+        if (dateParam) {
+            // Delete notes for specific date
+            await notes.deleteMany({
+                userId: new ObjectId(decoded.userId),
+                dateKey: dateParam,
+            });
+        } else {
+            // Delete all notes for user
+            await notes.deleteMany({ userId: new ObjectId(decoded.userId) });
+        }
 
         return NextResponse.json({
             success: true,
-            message: "All notes cleared",
+            message: dateParam
+                ? `Notes for ${dateParam} cleared`
+                : "All notes cleared",
         });
     } catch (error) {
         console.error("Error clearing notes:", error);
