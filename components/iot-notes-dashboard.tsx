@@ -270,49 +270,74 @@ export default function IoTNotesDashboard({ user }: IoTNotesDashboardProps) {
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       {/* Header */}
-      <div className="flex items-center justify-between mb-8">
-        <div className="flex items-center gap-3">
-          <PenTool className="w-8 h-8 text-cyan-500" />
-          <h1 className="text-3xl font-bold text-gray-800">Cumulus Dashboard</h1>
-        </div>
+      <div className="mb-8 p-6 -m-6" style={{ backgroundColor: "#005485" }}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <PenTool className="w-8 h-8 text-white" />
+            <h1 className="text-3xl font-bold text-white">Cumulus Dashboard</h1>
+          </div>
 
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 mr-4">
-            <User className="w-4 h-4 text-gray-600" />
-            <span className="text-sm text-gray-600">{user.username}</span>
-            <Badge variant="outline" className="text-xs">
-              {user.deviceId}
-            </Badge>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 mr-4">
+              <User className="w-4 h-4 text-white" />
+              <span className="text-sm text-white">{user.username}</span>
+              <Badge variant="outline" className="text-xs border-white text-white bg-transparent">
+                {user.deviceId}
+              </Badge>
+            </div>
+            <div className="flex items-center gap-2 mr-4">
+              {isConnected ? (
+                <>
+                  <Wifi className="w-4 h-4 text-cyan-300" />
+                  <span className="text-sm text-cyan-300">Connected</span>
+                </>
+              ) : (
+                <>
+                  <WifiOff className="w-4 h-4 text-red-300" />
+                  <span className="text-sm text-red-300">Disconnected</span>
+                </>
+              )}
+            </div>
+            <Button
+              onClick={() => fetchNotes()}
+              variant="outline"
+              size="sm"
+              disabled={isLoading}
+              className="border-white text-white hover:bg-white hover:text-blue-900"
+            >
+              <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
+              Refresh
+            </Button>
+            <Button
+              onClick={exportNotes}
+              variant="outline"
+              size="sm"
+              disabled={notes.length === 0}
+              className="border-white text-white hover:bg-white hover:text-blue-900"
+            >
+              <Download className="w-4 h-4 mr-2" />
+              Export
+            </Button>
+            <Button
+              onClick={clearDayNotes}
+              variant="outline"
+              size="sm"
+              disabled={notes.length === 0}
+              className="border-white text-white hover:bg-white hover:text-blue-900"
+            >
+              <Trash2 className="w-4 h-4 mr-2" />
+              Clear Day
+            </Button>
+            <Button
+              onClick={handleLogout}
+              variant="outline"
+              size="sm"
+              className="border-white text-white hover:bg-white hover:text-blue-900"
+            >
+              <LogOut className="w-4 h-4 mr-2" />
+              Logout
+            </Button>
           </div>
-          <div className="flex items-center gap-2 mr-4">
-            {isConnected ? (
-              <>
-                <Wifi className="w-4 h-4 text-cyan-500" />
-                <span className="text-sm text-cyan-600">Connected</span>
-              </>
-            ) : (
-              <>
-                <WifiOff className="w-4 h-4 text-red-500" />
-                <span className="text-sm text-red-600">Disconnected</span>
-              </>
-            )}
-          </div>
-          <Button onClick={() => fetchNotes()} variant="outline" size="sm" disabled={isLoading}>
-            <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
-            Refresh
-          </Button>
-          <Button onClick={exportNotes} variant="outline" size="sm" disabled={notes.length === 0}>
-            <Download className="w-4 h-4 mr-2" />
-            Export
-          </Button>
-          <Button onClick={clearDayNotes} variant="outline" size="sm" disabled={notes.length === 0}>
-            <Trash2 className="w-4 h-4 mr-2" />
-            Clear Day
-          </Button>
-          <Button onClick={handleLogout} variant="outline" size="sm">
-            <LogOut className="w-4 h-4 mr-2" />
-            Logout
-          </Button>
         </div>
       </div>
 
