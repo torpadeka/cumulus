@@ -303,7 +303,7 @@ export default function IoTNotesDashboard({ user }: IoTNotesDashboardProps) {
               variant="outline"
               size="sm"
               disabled={isLoading}
-              className="border-white text-white hover:bg-white hover:text-blue-900"
+              className="border-white text-black hover:bg-white hover:text-blue-900"
             >
               <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
               Refresh
@@ -313,7 +313,7 @@ export default function IoTNotesDashboard({ user }: IoTNotesDashboardProps) {
               variant="outline"
               size="sm"
               disabled={notes.length === 0}
-              className="border-white text-white hover:bg-white hover:text-blue-900"
+              className="border-white text-black hover:bg-white hover:text-blue-900"
             >
               <Download className="w-4 h-4 mr-2" />
               Export
@@ -323,7 +323,7 @@ export default function IoTNotesDashboard({ user }: IoTNotesDashboardProps) {
               variant="outline"
               size="sm"
               disabled={notes.length === 0}
-              className="border-white text-white hover:bg-white hover:text-blue-900"
+              className="border-white text-black hover:bg-white hover:text-blue-900"
             >
               <Trash2 className="w-4 h-4 mr-2" />
               Clear Day
@@ -332,7 +332,7 @@ export default function IoTNotesDashboard({ user }: IoTNotesDashboardProps) {
               onClick={handleLogout}
               variant="outline"
               size="sm"
-              className="border-white text-white hover:bg-white hover:text-blue-900"
+              className="border-white text-black hover:bg-white hover:text-blue-900"
             >
               <LogOut className="w-4 h-4 mr-2" />
               Logout
