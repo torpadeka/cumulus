@@ -96,21 +96,28 @@ export default function IoTNotesDashboard({ user }: IoTNotesDashboardProps) {
     }
   }
 
-  // Initial load
-  useEffect(() => {
-    fetchAvailableDates()
-    fetchNotes()
+ useEffect(() => {
+  // We still fetch dates and notes on initial load
+  fetchAvailableDates()
+  fetchNotes(currentDate) // Fetch notes for the current date whenever it changes
 
-    // Poll for new notes every 5 seconds (only for current date)
+  const today = new Date().toISOString().split("T")[0]
+
+  // Only set up the polling interval if the currently viewed date is today
+  if (currentDate === today) {
     const interval = setInterval(() => {
-      const today = new Date().toISOString().split("T")[0]
-      if (currentDate === today) {
-        fetchNotes()
-      }
+      console.log("Polling for new notes on:", currentDate)
+      fetchNotes(currentDate)
     }, 5000)
 
+    // The cleanup function for this effect.
+    // It runs when the component unmounts OR when `currentDate` changes.
+    // This is crucial for stopping the old interval.
     return () => clearInterval(interval)
-  }, [])
+  }
+
+  // If currentDate is not today, no interval is created and any existing one from a previous render is cleared.
+}, [currentDate])
 
   // When current date changes, fetch notes for that date
   useEffect(() => {
