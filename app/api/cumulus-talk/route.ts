@@ -20,9 +20,7 @@ const speechConfig = sdk.SpeechConfig.fromSubscription(
 speechConfig.speechRecognitionLanguage = "id-ID"; // For STT
 speechConfig.speechSynthesisVoiceName = "id-ID-ArdiNeural";
 
-ffmpeg.setFfmpegPath(
-    "C:\\Users\\indod\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\\ffmpeg-7.1.1-full_build\\bin\\ffmpeg.exe"
-);
+ffmpeg.setFfmpegPath(`C:\\ffmpeg-n6.1-latest-win64-gpl-6.1\\bin\\ffmpeg.exe`);
 
 export async function POST(req: NextRequest) {
     try {
@@ -61,7 +59,7 @@ export async function POST(req: NextRequest) {
         // Verify WAV file format (tolerate FFmpeg's non-zero exit code)
         try {
             const { stderr: wavInfo } = await execAsync(
-                `C:\\Users\\indod\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\\ffmpeg-7.1.1-full_build\\bin\\ffmpeg.exe -i ${tempWavPath}`,
+                `C:\\ffmpeg-n6.1-latest-win64-gpl-6.1\\bin\\ffmpeg.exe -i ${tempWavPath}`,
                 { encoding: "utf8" }
             );
             console.log("WAV file info:", wavInfo);
