@@ -39,34 +39,63 @@ export default function TestView({
     const currentSign = lesson.signs[currentTestIndex];
     const progress = ((currentTestIndex + 1) / lesson.signs.length) * 100;
 
+    // Cleanup on unmount
     useEffect(() => {
         return () => {
-            // Cleanup camera stream on unmount
             if (streamRef.current) {
-                streamRef.current.getTracks().forEach((track) => track.stop());
+                streamRef.current.getTracks().forEach((track) => {
+                    track.stop();
+                    console.log("Track stopped:", track);
+                });
+                streamRef.current = null;
             }
         };
     }, []);
 
+    // Handle video stream assignment when camera is enabled
+    useEffect(() => {
+        if (cameraEnabled && streamRef.current && videoRef.current) {
+            videoRef.current.srcObject = streamRef.current;
+            videoRef.current
+                .play()
+                .then(() => console.log("Video playback started"))
+                .catch((e) => console.error("Video play error:", e));
+        }
+    }, [cameraEnabled]);
+
     const enableCamera = async () => {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({
-                video: true,
+                video: { width: { ideal: 640 }, height: { ideal: 480 } },
             });
+            console.log(
+                "Stream active:",
+                stream.active,
+                stream.getVideoTracks()
+            );
             streamRef.current = stream;
-            if (videoRef.current) {
-                videoRef.current.srcObject = stream;
-            }
             setCameraEnabled(true);
-        } catch (error) {
-            console.error("Error accessing camera:", error);
-            alert("Unable to access camera. Please check permissions.");
+        } catch (error: any) {
+            console.error("Error accessing camera:", error.name, error.message);
+            let errorMessage =
+                "Unable to access camera. Please check permissions.";
+            if (error.name === "NotFoundError") {
+                errorMessage = "No camera found on this device.";
+            } else if (error.name === "NotAllowedError") {
+                errorMessage =
+                    "Camera access denied. Please allow camera access in your browser settings.";
+            }
+            alert(errorMessage);
+            setCameraEnabled(false);
         }
     };
 
     const disableCamera = () => {
         if (streamRef.current) {
-            streamRef.current.getTracks().forEach((track) => track.stop());
+            streamRef.current.getTracks().forEach((track) => {
+                track.stop();
+                console.log("Track stopped:", track);
+            });
             streamRef.current = null;
         }
         if (videoRef.current) {
@@ -126,6 +155,18 @@ export default function TestView({
         const newResults = [...testResults];
         newResults[currentTestIndex] = false;
         setTestResults(newResults);
+    };
+
+    // Debug function to log stream and video state
+    const logStreamState = () => {
+        console.log(
+            "Stream:",
+            streamRef.current,
+            "Active:",
+            streamRef.current?.active
+        );
+        console.log("Video srcObject:", videoRef.current?.srcObject);
+        console.log("Camera enabled:", cameraEnabled);
     };
 
     return (
@@ -192,15 +233,28 @@ export default function TestView({
                             </CardTitle>
                         </CardHeader>
                         <CardContent>
-                            <div className="aspect-video bg-gray-900 rounded-lg overflow-hidden mb-4">
-                                {cameraEnabled ? (
-                                    <video
-                                        ref={videoRef}
-                                        autoPlay
-                                        muted
-                                        className="w-full h-full object-cover"
-                                    />
-                                ) : (
+                            <div className="relative w-full h-64 bg-gray-900 rounded-lg overflow-hidden mb-4">
+                                <video
+                                    ref={videoRef}
+                                    autoPlay
+                                    muted
+                                    playsInline
+                                    style={{
+                                        display: cameraEnabled
+                                            ? "block"
+                                            : "none",
+                                        width: "100%",
+                                        height: "100%",
+                                        objectFit: "cover",
+                                    }}
+                                    onError={(e) =>
+                                        console.error("Video element error:", e)
+                                    }
+                                    onCanPlay={() =>
+                                        console.log("Video can play")
+                                    }
+                                />
+                                {!cameraEnabled && (
                                     <div className="w-full h-full flex items-center justify-center text-white">
                                         <div className="text-center">
                                             <Camera className="w-16 h-16 mx-auto mb-4 opacity-50" />
@@ -241,6 +295,12 @@ export default function TestView({
                                         >
                                             <CameraOff className="w-4 h-4 mr-2" />
                                             Disable
+                                        </Button>
+                                        <Button
+                                            onClick={logStreamState}
+                                            variant="outline"
+                                        >
+                                            Log Stream
                                         </Button>
                                     </>
                                 )}

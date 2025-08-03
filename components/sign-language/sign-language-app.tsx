@@ -19,7 +19,6 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import LessonView from "./lesson-view";
-import PracticeView from "./practice-view";
 import TestView from "./test-view";
 import ProfileView from "./profile-view";
 
@@ -34,43 +33,22 @@ interface SignLanguageAppProps {
     user: UserType;
 }
 
-type ViewType = "home" | "lesson" | "practice" | "test" | "profile";
+type ViewType = "home" | "lesson" | "test" | "profile";
 
 // Mock data for lessons
 const lessons = [
     {
         id: 1,
-        title: "Alphabet A-E",
-        description:
-            "Learn the first 5 letters of Indonesian Sign Language alphabet",
+        title: "Basic Questions",
+        description: "Learn common question words using SIBI",
         difficulty: "Beginner",
         duration: "10 min",
         completed: true,
         score: 95,
-        signs: ["A", "B", "C", "D", "E"],
+        signs: ["Siapa", "Kapan", "Bagaimana", "Berapa"],
     },
     {
         id: 2,
-        title: "Alphabet F-J",
-        description: "Continue with letters F through J",
-        difficulty: "Beginner",
-        duration: "10 min",
-        completed: true,
-        score: 88,
-        signs: ["F", "G", "H", "I", "J"],
-    },
-    {
-        id: 3,
-        title: "Alphabet K-O",
-        description: "Learn letters K through O",
-        difficulty: "Beginner",
-        duration: "10 min",
-        completed: false,
-        score: 0,
-        signs: ["K", "L", "M", "N", "O"],
-    },
-    {
-        id: 4,
         title: "Basic Greetings",
         description: "Common greeting signs in Indonesian Sign Language",
         difficulty: "Beginner",
@@ -80,7 +58,7 @@ const lessons = [
         signs: ["Hello", "Good Morning", "Thank You", "Please", "Sorry"],
     },
     {
-        id: 5,
+        id: 3,
         title: "Family Members",
         description: "Signs for family relationships",
         difficulty: "Intermediate",
@@ -115,11 +93,6 @@ export default function SignLanguageApp({ user }: SignLanguageAppProps) {
         setCurrentView("lesson");
     };
 
-    const startPractice = (lesson: any) => {
-        setSelectedLesson(lesson);
-        setCurrentView("practice");
-    };
-
     const startTest = (lesson: any) => {
         setSelectedLesson(lesson);
         setCurrentView("test");
@@ -142,16 +115,6 @@ export default function SignLanguageApp({ user }: SignLanguageAppProps) {
     if (currentView === "lesson" && selectedLesson) {
         return (
             <LessonView
-                lesson={selectedLesson}
-                onBack={goHome}
-                onComplete={() => setCurrentView("home")}
-            />
-        );
-    }
-
-    if (currentView === "practice" && selectedLesson) {
-        return (
-            <PracticeView
                 lesson={selectedLesson}
                 onBack={goHome}
                 onComplete={() => setCurrentView("home")}
@@ -219,7 +182,7 @@ export default function SignLanguageApp({ user }: SignLanguageAppProps) {
                             onClick={() => setCurrentView("profile")}
                             variant="outline"
                             size="sm"
-                            className="border-white text-white hover:bg-white hover:text-blue-900"
+                            className="border-white hover:bg-white text-blue-900"
                         >
                             <User className="w-4 h-4 mr-2" />
                             Profile
@@ -377,18 +340,6 @@ export default function SignLanguageApp({ user }: SignLanguageAppProps) {
                                         >
                                             <BookOpen className="w-4 h-4 mr-2" />
                                             Learn
-                                        </Button>
-                                        <Button
-                                            onClick={() =>
-                                                startPractice(lesson)
-                                            }
-                                            variant="outline"
-                                            className="flex-1"
-                                            size="sm"
-                                            disabled={!lesson.completed}
-                                        >
-                                            <Play className="w-4 h-4 mr-2" />
-                                            Practice
                                         </Button>
                                         <Button
                                             onClick={() => startTest(lesson)}

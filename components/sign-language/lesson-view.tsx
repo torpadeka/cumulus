@@ -116,20 +116,11 @@ export default function LessonView({
                         </CardHeader>
                         <CardContent>
                             <div className="aspect-video bg-gray-100 rounded-lg flex items-center justify-center mb-4">
-                                {/* Placeholder for video */}
-                                <div className="text-center">
-                                    <div className="w-24 h-24 bg-cyan-200 rounded-full flex items-center justify-center mx-auto mb-4">
-                                        <span className="text-2xl font-bold text-cyan-700">
-                                            {currentSign}
-                                        </span>
-                                    </div>
-                                    <p className="text-gray-600">
-                                        Sign Language Video
-                                    </p>
-                                    <p className="text-sm text-gray-500">
-                                        Showing: {currentSign}
-                                    </p>
-                                </div>
+                                <iframe
+                                    src="https://www.youtube.com/embed/TuQj8aFOcgs"
+                                    className="w-full h-full"
+                                    allowFullScreen
+                                />
                             </div>
 
                             {/* Video Controls */}
